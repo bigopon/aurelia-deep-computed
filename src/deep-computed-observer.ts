@@ -1,111 +1,119 @@
 import {
   ObserverLocator,
-  PropertyObserver,
-  InternalCollectionObserver,
-  CollectionObserver,
   subscriberCollection,
-  InternalPropertyObserver,
-  Disposable,
-  ICollectionObserverSplice
+  ICollectionObserverSplice,
+  Expression,
+  connectable as $connectable,
+  Scope,
+  createOverrideContext,
+  Binding,
+  Disposable
 } from 'aurelia-binding';
 import {
-  TaskQueue
-} from 'aurelia-task-queue';
-
-type IPropertyObserver = InternalCollectionObserver  & {
-  subscribe(context: string | ICallable, callable?: ICallable): Disposable;
-  unsubscribe(context: string | ICallable, callable?: ICallable): void;
-};
-
-type ICollectionObserver = InternalCollectionObserver & {
-  subscribe(context: string | ICallable, callable?: ICallable): Disposable;
-  unsubscribe(context: string | ICallable, callable?: ICallable): void;
-}
-
-/**
- * @internal
- */
-declare module 'aurelia-binding' {
-  interface ObserverLocator {
-    taskQueue: TaskQueue;
-    getObserver(obj: object, propertyName: string): IPropertyObserver;
-    getArrayObserver(arr: any[]): ICollectionObserver;
-    getSetObserver(set: Set<any>): ICollectionObserver;
-    getMapObserver(map: Map<any, any>): ICollectionObserver;
-  }
-}
-
-export interface ICallable {
-  call(...args: any[]): void;
-}
-
-/**
- * @internal
- */
-declare global {
-  interface ObjectConstructor {
-    getPropertyDescriptor(obj: object, propertyName: string | symbol): DeepComputedFromPropertyDescriptor;
-  }
-}
-
-interface DeepComputedFromPropertyDescriptor extends PropertyDescriptor {
-  get?: (() => any) & { __deep: boolean; __obj: any; }
-} 
-
-ObserverLocator.prototype['createPropertyObserver'] = ((fn) => {
-  return function(obj: object, propertyName: string | symbol, descriptor: DeepComputedFromPropertyDescriptor) {
-    descriptor = Object.getPropertyDescriptor(obj, propertyName);
-    if (descriptor && descriptor.get && descriptor.get.__deep === true) {
-      return new DeepObserver(obj[descriptor.get.__obj], this);
-    }
-    return fn.call(this, obj, propertyName, descriptor);
-  }
-})(ObserverLocator.prototype['createPropertyObserver']);
-
-export function deepComputedFrom(prop: string) {
-  return function (target: any, key: any, descriptor: PropertyDescriptor) {
-    const $descriptor = descriptor as DeepComputedFromPropertyDescriptor;
-    $descriptor.get.__deep = true;
-    $descriptor.get.__obj = prop;
-    return descriptor;
-  } as MethodDecorator;
-}
+  DeepComputedFromPropertyDescriptor,
+  ICallable,
+  IPropertyObserver,
+  ICollectionObserver
+} from './definitions';
+import { ComputedExpression } from './deep-computed-expression';
 
 // a deep observer needsd to be able to
 // - observe all properties, recursively without boundary
 // - detect a path of observer change
 
-export interface DeepObserver {
+export interface DeepComputedObserver extends Binding {
+  _version: number;
   addSubscriber(callable: (...args: any[]) => void): boolean;
   addSubscriber(context: string, callable: ICallable): boolean;
   addSubscriber(context: string | ICallable, callable?: ICallable): boolean;
-  callSubscribers(newValue: any): void;
+  callSubscribers(newValue: any, oldValue?: any): void;
   hasSubscriber(context: string | ICallable, callable?: ICallable): boolean;
   hasSubscribers(): boolean;
+  removeSubscriber(context: string | ICallable, callable?: ICallable): boolean;
+  observe(): void;
+  unobserve(all?: boolean): void;
 }
 
+// it looks better using @...(), so we cast
+const connectable = $connectable as any;
+
+const emptyLookupFunctions = {
+  valueConverters: name => null,
+  bindingBehaviors: name => null,
+};
+
+const unset = {};
+
+@connectable()
 @subscriberCollection()
-export class DeepObserver {
+export class DeepComputedObserver {
 
   isQueued: boolean = false;
+  private oldValue: any = unset;
+  private rootDeps: IDependency[];
+
+  public readonly scope: Scope;
 
   constructor(
     public obj: object,
-    public observerLocator: ObserverLocator,
+    /**
+     * The expression that will be used to evaluate 
+     */
+    public expression: ComputedExpression,
+    public observerLocator: ObserverLocator
   ) {
-    this.handleChange = this.handleChange.bind(this);
+    this.scope = { bindingContext: obj, overrideContext: createOverrideContext(obj) };
   }
 
-  subscribe(context: string | ICallable, callable?: ICallable) {
-    const hasSubscribers = this.hasSubscribers();
-    if (this.addSubscriber(context, callable) && !hasSubscribers) {
-      this.observe(this.obj);
+  getValue(): any {
+    return this.expression.evaluate(this.scope, emptyLookupFunctions);
+  }
+
+  setValue(newValue: any): void {
+    this.expression.assign(this.scope, newValue, emptyLookupFunctions);
+  }
+
+  subscribe(context: string | ICallable, callable?: ICallable): void | Disposable {
+    if (!this.hasSubscribers()) {
+      this.oldValue = this.expression.evaluate(this.scope, emptyLookupFunctions);
+      this.expression.connect(
+        /* @connectable makes this class behave as Binding */this,
+        this.scope
+      );
+      this.observeDeps(this.expression.getDeps(this.scope));
+    }
+    this.addSubscriber(context, callable);
+    // scenario where this observer is created manually via ObserverLocator.getObserver
+    if (arguments.length === 1 && typeof context === 'function') {
+      return {
+        dispose: () => {
+          this.unsubscribe(context, callable);
+        }
+      };
     }
   }
 
-  call() {
+  unsubscribe(context: string | ICallable, callable?: ICallable): void {
+    if (this.removeSubscriber(context, callable) && !this.hasSubscribers()) {
+      this.unobserveDeps();
+      this.unobserve(true);
+      this.oldValue = unset;
+    }
+  }
+
+  call(context?) {
     this.isQueued = false;
-    this.callSubscribers(this.obj);
+    let newValue = this.expression.evaluate(this.scope, emptyLookupFunctions);
+    let oldValue = this.oldValue;
+    if (newValue !== oldValue) {
+      this.oldValue = newValue;
+      this.callSubscribers(newValue, oldValue);
+    }
+    this._version++;
+    this.expression.connect(/* @connectable makes this class behave as Binding */this, this.scope);
+    this.unobserve(false);
+    // const $newValue = context === deepObserverBaseContext ? newValue : this.obj[this.propertyName]; 
+    // this.callSubscribers($newValue);
   }
 
   handleChange(dep: IDependency): void {
@@ -116,10 +124,23 @@ export class DeepObserver {
     this.isQueued = true;
   }
 
-  private observe(value: unknown): void {
-    const rootDependency = getDependency(this, null, this.obj)!;
-    rootDependency.collect();
-    rootDependency.observe();
+  private observeDeps(values: any[]): void {
+    let rootDeps = this.rootDeps;
+    if (rootDeps == null) {
+      rootDeps = this.rootDeps = values.map(v => getDependency(this, null, v)).filter(Boolean);
+    }
+    rootDeps.forEach(dep => {
+      dep.collect();
+      dep.observe();
+    });
+  }
+
+  private unobserveDeps(): void {
+    const rootDeps = this.rootDeps;
+    if (rootDeps != null) {
+      rootDeps.forEach(releaseDep);
+      this.rootDeps = void 0;
+    }
   }
 }
 
@@ -127,7 +148,7 @@ interface IDependency {
   /**
    * Root observer/dep of this dep
    */
-  owner: DeepObserver;
+  owner: DeepComputedObserver;
   /**
    * The parent dep of this dep. Represents the owner object of the object associated with this dep
    */
@@ -166,10 +187,10 @@ class ObjectDependency implements IDependency {
   deps: Map<string | number, IDependency> = new Map();
 
   constructor(
-    public owner: DeepObserver,
+    public owner: DeepComputedObserver,
     public parent: IDependency | null,
     public value: object
-  ) {}
+  ) { }
 
   collect(): void {
     const value = this.value;
@@ -195,7 +216,7 @@ class ObjectPropertyDependency implements IDependency {
   observer: IPropertyObserver;
 
   constructor(
-    public owner: DeepObserver,
+    public owner: DeepComputedObserver,
     public parent: ObjectDependency,
     public property: string,
     public value: any
@@ -257,10 +278,10 @@ class ArrayDependency implements IDependency {
   observer: ICollectionObserver;
 
   constructor(
-    public owner: DeepObserver,
+    public owner: DeepComputedObserver,
     public parent: IDependency | null,
     public value: any[],
-  ) {}
+  ) { }
 
   collect(): void {
     for (let i = 0, arr = this.value, ii = arr.length; ii > i; ++i) {
@@ -318,10 +339,10 @@ class SetDependency implements IDependency {
   deps: Map<string | number, IDependency> = new Map();
 
   constructor(
-    public owner: DeepObserver,
+    public owner: DeepComputedObserver,
     public parent: IDependency | null,
     public set: Set<any>,
-  ) {}
+  ) { }
 
   collect(): void {
     this.set.forEach(value => {
@@ -336,18 +357,19 @@ class SetDependency implements IDependency {
   }
 
   observe(): void {
-
+    this.deps.forEach(observeDep);
   }
 
   release(): void {
-
+    this.deps.forEach(releaseDep);
+    this.deps.clear();
   }
 }
 
 const dependencyMap = new WeakMap();
 const raw2Dep = new WeakMap();
 
-function getDependency(owner: DeepObserver, parent: IDependency, value: unknown): IDependency {
+function getDependency(owner: DeepComputedObserver, parent: IDependency, value: unknown): IDependency {
   const valueType = typeof value;
   if (value == null || valueType === 'boolean' || valueType === 'number' || valueType === 'string' || valueType === 'symbol' || valueType === 'bigint' || typeof value === 'function') {
     return;
