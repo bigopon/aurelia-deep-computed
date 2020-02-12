@@ -4,6 +4,10 @@
     "module": "ESNext",
     "moduleResolution": "node",
     "experimentalDecorators": true,
+    "stripInternal": true,
     "lib": ["es2015", "DOM"]
-  }
+  },
+  "include": [
+    "src"
+  ]
 }
