@@ -37,9 +37,12 @@ export interface DeepComputedObserver extends Binding {
   unobserve(all?: boolean): void;
 }
 
-// it looks better using @...(), so we cast
+// it looks better using @...(), so we cast to any instead of ClassDecorator
+// aurelia decorators support both usage: with and without parens
 const connectable = $connectable as any;
 
+// by default, it does not support value converters & binding behaviors in the expressions
+// but maybe it should. TODO
 const emptyLookupFunctions = {
   valueConverters: name => null,
   bindingBehaviors: name => null,

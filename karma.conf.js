@@ -1,9 +1,9 @@
 const path = require('path');
+const { AureliaPlugin } = require('aurelia-webpack-plugin');
 
 module.exports = function(config) {
   const browsers = config.browsers;
   config.set({
-
     basePath: '',
     frameworks: ["jasmine"],
     files: ["test/**/*.spec.ts"],
@@ -32,7 +32,16 @@ module.exports = function(config) {
         ]
       },
       plugins: [
-        
+        new AureliaPlugin({
+          aureliaApp: undefined,
+          dist: 'es2015',
+          features: { 
+            ie: false,
+            svg: false,
+            unparser: false,
+            polyfills: "esnext"
+          }
+        })
       ]
     },
     mime: {
