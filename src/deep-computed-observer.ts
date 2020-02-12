@@ -2,7 +2,6 @@ import {
   ObserverLocator,
   subscriberCollection,
   ICollectionObserverSplice,
-  Expression,
   connectable as $connectable,
   Scope,
   createOverrideContext,
@@ -10,7 +9,6 @@ import {
   Disposable
 } from 'aurelia-binding';
 import {
-  DeepComputedFromPropertyDescriptor,
   ICallable,
   IPropertyObserver,
   ICollectionObserver
@@ -50,8 +48,6 @@ const emptyLookupFunctions = {
 
 const unset = {};
 
-@connectable()
-@subscriberCollection()
 export class DeepComputedObserver {
 
   /**
@@ -197,6 +193,10 @@ export class DeepComputedObserver {
     }
   }
 }
+
+// use this instead of decorator to avoid extra generated code
+connectable()(DeepComputedObserver);
+subscriberCollection()(DeepComputedObserver);
 
 export interface IDependency {
   /**
