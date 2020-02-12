@@ -1,14 +1,14 @@
 {
   "name": "aurelia-deep-computed",
   "version": "0.1.0",
-  "description": "",
+  "description": "A plugin to declare deep computed dependencies with ability to watch recursively for changes",
   "license": "MIT",
   "author": "Binh Vo <bigopon.777@gmail.com> (https://github.com/bigopon)",
-  "main": "dist/commonjs/aurelia-validation.js",
-  "module": "dist/es2015/aurelia-validation.js",
-  "browser": "dist/umd/aurelia-validation.js",
-  "unpkg": "dist/umd-es2015/aurelia-validation.js",
-  "types": "dist/aurelia-validation.d.ts",
+  "main": "dist/commonjs/index.js",
+  "module": "dist/es2015/index.js",
+  "browser": "dist/umd/index.js",
+  "unpkg": "dist/umd-es2015/index.js",
+  "types": "dist/types/index.d.ts",
   "scripts": {
     "build": "rollup -c --environment BUILD:production",
     "postbuild": "npm run build:dts",
@@ -20,7 +20,11 @@
     "precut-release": "npm run test",
     "cut-release": "standard-version -t \"\" -i doc/CHANGELOG.md && npm run build"
   },
-  "keywords": [],
+  "keywords": [
+    "aurelia",
+    "computed",
+    "computed observation"
+  ],
   "dependencies": {
     "aurelia-binding": "^2.5.2",
     "aurelia-task-queue": "^1.3.3"
