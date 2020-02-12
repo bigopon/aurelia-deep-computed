@@ -71,4 +71,16 @@ describe('deep-computed-observer.spec.ts', () => {
     expect(host.textContent).toBe(JSON.stringify({ a: 1, b: 2 }));
 
   });
+
+  describe('array test caces', function todo() {
+
+  });
+
+  describe('set test cases', function todo() {
+
+  });
+
+  describe('map test cases', function todo() {
+
+  });
 });

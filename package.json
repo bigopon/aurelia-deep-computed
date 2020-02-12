@@ -10,8 +10,9 @@
   "unpkg": "dist/umd-es2015/aurelia-validation.js",
   "types": "dist/aurelia-validation.d.ts",
   "scripts": {
-    "build": "node build/scripts/build",
-    "build:dts": "tsc --project tsconfig.json -- --declaration --emitDeclarationOnly --outDir dist/types",
+    "build": "rollup -c --environment BUILD:production",
+    "postbuild": "npm run build:dts",
+    "build:dts": "tsc --project tsconfig.json --declaration --emitDeclarationOnly --outDir dist/types",
     "test": "karma start --single-run",
     "test:watch": "karma start",
     "test:debugger": "karma start --browsers ChromeDebugging",
@@ -48,10 +49,16 @@
     "karma-mocha-reporter": "^2.2.5",
     "karma-sourcemap-loader": "^0.3.7",
     "karma-webpack": "^4.0.2",
+    "rollup": "^1.31.0",
+    "rollup-plugin-typescript2": "^0.26.0",
     "ts-loader": "^6.2.1",
     "tslib": "^1.10.0",
     "typescript": "^3.7.5",
     "webpack": "^4.41.5",
     "webpack-cli": "^3.3.10"
-  }
+  },
+  "files": [
+    "dist",
+    "src"
+  ]
 }

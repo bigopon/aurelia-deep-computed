@@ -1,14 +1,17 @@
 import {
   FrameworkConfiguration,
   ObserverLocator,
-  Expression,
   Parser,
-  createOverrideContext,
   InternalPropertyObserver,
 } from 'aurelia-framework';
-import { IPropertyObserver, DeepComputedFromPropertyDescriptor } from './definitions';
+import { DeepComputedFromPropertyDescriptor } from './definitions';
 import { DeepComputedObserver } from './deep-computed-observer';
 import { ComputedExpression } from './deep-computed-expression';
+
+export {
+  DeepComputedObserver,
+  IDependency
+} from './deep-computed-observer';
 
 export function configure(config: FrameworkConfiguration): void {
   // need to run at post task to ensure we don't resolve everything too early

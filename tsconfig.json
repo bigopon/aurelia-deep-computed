@@ -5,7 +5,8 @@
     "moduleResolution": "node",
     "experimentalDecorators": true,
     "stripInternal": true,
-    "lib": ["es2015", "DOM"]
+    "lib": ["es2015", "DOM"],
+    "sourceMap": true
   },
   "include": [
     "src"
