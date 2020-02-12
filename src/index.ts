@@ -1,9 +1,11 @@
 import {
   FrameworkConfiguration,
+} from 'aurelia-framework';
+import {
   ObserverLocator,
   Parser,
   InternalPropertyObserver,
-} from 'aurelia-framework';
+} from 'aurelia-binding';
 import { DeepComputedFromPropertyDescriptor } from './definitions';
 import { DeepComputedObserver } from './deep-computed-observer';
 import { ComputedExpression } from './deep-computed-expression';

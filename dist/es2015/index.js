@@ -1,5 +1,4 @@
-import { ObserverLocator, Parser } from 'aurelia-framework';
-import { createOverrideContext, subscriberCollection, connectable as connectable$1, Expression } from 'aurelia-binding';
+import { createOverrideContext, subscriberCollection, connectable as connectable$1, Expression, ObserverLocator, Parser } from 'aurelia-binding';
 
 // it looks better using @...(), so we cast to any instead of ClassDecorator
 // aurelia decorators support both usage: with and without parens

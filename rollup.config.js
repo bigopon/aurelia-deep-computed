@@ -8,7 +8,20 @@ const TARGET_DIR = process.env.target_dir || 'dist';
 export default ([
   {
     input: FILE_NAME_ENTRY,
-    output: { file: `${TARGET_DIR}/es2015/${FILE_NAME_OUTPUT}`,   sourcemap: true, format: 'es' },
+    output: [
+      { file: `${TARGET_DIR}/es2015/${FILE_NAME_OUTPUT}`,   sourcemap: true, format: 'es' },
+      {
+        file: `${TARGET_DIR}/umd-es2015/${FILE_NAME_OUTPUT}`,
+        sourcemap: true,
+        format: 'umd',
+        name: 'au.deepComputed',
+        globals: {
+          'aurelia-binding': 'au',
+          'aurelia-task-queue': 'au',
+          'aurelia-framework': 'au',
+        }
+      }
+    ],
     plugins: [
       typescript({
         tsconfigOverride: {
@@ -27,9 +40,25 @@ export default ([
       { file: `${TARGET_DIR}/commonjs/${FILE_NAME_OUTPUT}`,       sourcemap: true, format: 'cjs' },
       { file: `${TARGET_DIR}/amd/${FILE_NAME_OUTPUT}`,            sourcemap: true, format: 'amd', amd: { id: packageJson.name } },
       { file: `${TARGET_DIR}/native-modules/${FILE_NAME_OUTPUT}`, sourcemap: true, format: 'es' },
+      {
+        file: `${TARGET_DIR}/umd/${FILE_NAME_OUTPUT}`,
+        sourcemap: true,
+        format: 'umd',
+        name: 'au.deepComputed',
+        globals: {
+          'aurelia-binding': 'au',
+          'aurelia-task-queue': 'au',
+          'aurelia-framework': 'au',
+        }
+      }
     ],
     plugins: [
       typescript({
+        tsconfigOverride: {
+          compilerOptions: {
+            target: 'es5'
+          }
+        },
         cacheRoot: '.rollupcache',
       })
     ]

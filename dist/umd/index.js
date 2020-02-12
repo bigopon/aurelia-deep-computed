@@ -1,4 +1,8 @@
-define('aurelia-deep-computed', ['exports', 'aurelia-binding'], function (exports, aureliaBinding) { 'use strict';
+(function (global, factory) {
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports, require('aurelia-binding')) :
+  typeof define === 'function' && define.amd ? define(['exports', 'aurelia-binding'], factory) :
+  (global = global || self, factory((global.au = global.au || {}, global.au.deepComputed = {}), global.au));
+}(this, (function (exports, aureliaBinding) { 'use strict';
 
   // it looks better using @...(), so we cast to any instead of ClassDecorator
   // aurelia decorators support both usage: with and without parens
@@ -441,5 +445,5 @@ define('aurelia-deep-computed', ['exports', 'aurelia-binding'], function (export
 
   Object.defineProperty(exports, '__esModule', { value: true });
 
-});
+})));
 //# sourceMappingURL=index.js.map
