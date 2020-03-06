@@ -8,7 +8,6 @@ import {
 } from 'aurelia-binding';
 import {
   DeepComputedFromPropertyDescriptor,
-  IDependency,
 } from './definitions';
 import { DeepComputedObserver } from './deep-computed-observer';
 import { ComputedExpression } from './deep-computed-expression';
@@ -16,6 +15,10 @@ import { ComputedExpression } from './deep-computed-expression';
 export {
   DeepComputedObserver,
 } from './deep-computed-observer';
+
+export {
+  IDependency
+} from './definitions';
 
 export function configure(config: FrameworkConfiguration): void {
   // need to run at post task to ensure we don't resolve everything too early

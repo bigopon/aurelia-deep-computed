@@ -21,7 +21,13 @@ export type ICollectionObserver = InternalCollectionObserver & {
 export interface IComputedOptions {
   deep: boolean;
   deps: string[];
+  /**
+   * Used to cache parsed expression from declared dependency
+   */
   parsedDeps?: Expression[];
+  /**
+   * Used to store aggregated computed expression
+   */
   computedExpression?: ComputedExpression;
 }
 
