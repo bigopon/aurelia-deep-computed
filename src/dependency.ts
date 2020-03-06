@@ -1,5 +1,13 @@
-import { ICollectionObserverSplice } from 'aurelia-binding';
-import { IPropertyObserver, ICollectionObserver, IDependency, IDeepComputedObserver } from './definitions';
+import {
+  ICollectionObserverSplice,
+} from 'aurelia-binding';
+import {
+  IPropertyObserver,
+  ICollectionObserver,
+  IDependency,
+  IComputedObserver,
+  ICollectionDependency
+} from './definitions';
 
 /**@internal */
 export const releaseDep = (dep: IDependency) => {
@@ -14,22 +22,24 @@ export const observeDep = (dep: IDependency) => {
 // for Aurelia binding subscriber, a context is required if it's not a function
 const objectPropDepContext = 'context:object_prop_dep';
 const arrayDepContext = 'context:array_dep';
+const setDepContext = 'context:set_dep';
+const mapDepContext = 'context:map_dep';
 
 class ObjectDependency implements IDependency {
   deps: Map<string | number, IDependency> = new Map();
   connected: boolean = false;
   constructor(
-    public owner: IDeepComputedObserver,
+    public owner: IComputedObserver,
     public parent: IDependency | null,
     public value: object
   ) { }
 
-  collect(deep?: boolean): void {
+  collect(): void {
     const value = this.value;
     Object.keys(value).forEach(prop => {
       const propertyDep = new ObjectPropertyDependency(this.owner, this, prop, value[prop]);
       this.deps.set(prop, propertyDep);
-      propertyDep.collect(deep);
+      propertyDep.collect();
     });
   }
 
@@ -56,23 +66,25 @@ class ObjectPropertyDependency implements IDependency {
   dep: IDependency;
 
   constructor(
-    public owner: IDeepComputedObserver,
+    public owner: IComputedObserver,
     public parent: ObjectDependency,
     public property: string,
     public value: any
   ) {}
 
-  collect(deep?: boolean): void {
+  collect(): void {
     this.dep = void 0;
+    const owner = this.owner;
+    const deep = owner.deep;
     if (!deep) {
       return;
     }
-    const valueDep = getDependency(this.owner, this, this.value);
+    const valueDep = getDependency(owner, this, this.value);
     if (valueDep == null) {
       return;
     }
     this.dep = valueDep;
-    valueDep.collect(deep);
+    valueDep.collect();
   }
 
   observe(): void {
@@ -121,46 +133,28 @@ class ObjectPropertyDependency implements IDependency {
   }
 }
 
-class ArrayDependency implements IDependency {
+abstract class BaseCollectionDependency implements ICollectionDependency {
+
+  owner: IComputedObserver;
+  parent: IDependency | null;
+  value: any[] | Map<any, any> | Set<any>;
+
   deps: Map<string | number, IDependency> = new Map();
   observer: ICollectionObserver;
   connected: boolean = false;
 
-  constructor(
-    public owner: IDeepComputedObserver,
-    public parent: IDependency | null,
-    public value: any[]
-  ) { }
+  abstract subscribeContext: string;
 
-  collect(deep?: boolean): void {
-    if (!deep) {
-      this.deps.clear();
-      return;
-    }
-    for (let i = 0, arr = this.value, ii = arr.length; ii > i; ++i) {
-      let value = arr[i];
-      const dep = getDependency(this.owner, this, value);
-      // if an index is not observable
-      // just ignore
-      if (dep == void 0) {
-        return;
-      }
-      this.deps.set(i, dep);
-      dep.collect();
-    }
-  }
+  abstract collect(): void;
+
+  abstract getObserver(): ICollectionObserver;
 
   observe() {
     let observer = this.observer;
     if (observer == null) {
-      observer
-        = this.observer
-        = this
-          .owner
-          .observerLocator
-          .getArrayObserver(this.value);
+      observer = this.observer = this.getObserver();
     }
-    observer.subscribe(arrayDepContext, this);
+    observer.subscribe(this.subscribeContext, this);
     this.deps.forEach(observeDep);
     this.connected = true;
   }
@@ -189,52 +183,145 @@ class ArrayDependency implements IDependency {
   }
 }
 
-class SetDependency implements IDependency {
+class ArrayDependency extends BaseCollectionDependency {
 
-  deps: Map<string | number, IDependency> = new Map();
-  connected: boolean = false;
+  subscribeContext = arrayDepContext;
 
   constructor(
-    public owner: IDeepComputedObserver,
+    public owner: IComputedObserver,
     public parent: IDependency | null,
-    public set: Set<any>
-  ) { }
+    public value: any[]
+  ) {
+    super();
+  }
 
-  collect(deep?: boolean): void {
-    this.deps.clear();
+  getObserver(): ICollectionObserver {
+    return this
+      .owner
+      .observerLocator
+      .getArrayObserver(this.value);
+  }
+
+  collect(): void {
+    const owner = this.owner;
+    const deep = owner.deep;
+    const deps = this.deps;
     if (!deep) {
       return;
     }
-    this.set.forEach(value => {
-      const dep = getDependency(this.owner, this, value);
+    for (let i = 0, arr = this.value, ii = arr.length; ii > i; ++i) {
+      let value = arr[i];
+      const dep = getDependency(owner, this, value);
+      // if an index is not observable
+      // just ignore
       if (dep == void 0) {
         return;
       }
+      const existingDep = deps.get(i);
+      if (existingDep) {
+        existingDep.release();
+      }
+      deps.set(i, dep);
       dep.collect();
-      // incorrect to typings, but safe
-      this.deps.set(value as any, dep);
-    });
-  }
-
-  observe(): void {
-    this.deps.forEach(observeDep);
-    this.connected = true;
-  }
-
-  release(): void {
-    this.deps.forEach(releaseDep);
-    this.deps.clear();
-    this.connected = false;
+    }
   }
 }
 
-export function getDependency(owner: IDeepComputedObserver, parent: IDependency, value: unknown): IDependency {
+class MapDependency extends BaseCollectionDependency {
+
+  subscribeContext = mapDepContext;
+
+  constructor(
+    public owner: IComputedObserver,
+    public parent: IDependency | null,
+    public value: Map<any, any>
+  ) {
+    super();
+  }
+
+  getObserver(): ICollectionObserver {
+    return this
+      .owner
+      .observerLocator
+      .getMapObserver(this.value);
+  }
+
+  collect(): void {
+    const owner = this.owner;
+    const deep = owner.deep;
+    const deps = this.deps;
+    if (!deep) {
+      return;
+    }
+    this.value.forEach((value, key) => {
+      const dep = getDependency(owner, this, value);
+      if (dep == void 0) {
+        return;
+      }
+      const existingDep = deps.get(key);
+      if (existingDep) {
+        existingDep.release();
+      }
+      // incorrect to typings, but safe
+      deps.set(key, dep);
+      dep.collect();
+    });
+  }
+}
+
+class SetDependency extends BaseCollectionDependency {
+
+  subscribeContext = setDepContext;
+
+  constructor(
+    public owner: IComputedObserver,
+    public parent: IDependency | null,
+    public value: Set<any>
+  ) {
+    super();
+  }
+
+  getObserver(): ICollectionObserver {
+    return this
+      .owner
+      .observerLocator
+      .getSetObserver(this.value);
+  }
+
+  collect(): void {
+    const owner = this.owner;
+    const deep = owner.deep;
+    const deps = this.deps;
+    if (!deep) {
+      return;
+    }
+    this.value.forEach(value => {
+      const dep = getDependency(owner, this, value);
+      if (dep == void 0) {
+        return;
+      }
+      const existingDep = deps.get(value);
+      if (existingDep) {
+        existingDep.release();
+      }
+      deps.set(value, dep);
+      if (deep) {
+        dep.collect();
+      }
+    });
+  }
+}
+
+export function getDependency(owner: IComputedObserver, parent: IDependency, value: unknown): IDependency {
   const valueType = typeof value;
   if (value == null || valueType === 'boolean' || valueType === 'number' || valueType === 'string' || valueType === 'symbol' || valueType === 'bigint' || typeof value === 'function') {
     return;
   }
   if (Array.isArray(value)) {
     return new ArrayDependency(owner, parent, value);
+  }
+  if (value instanceof Map) {
+    return new MapDependency(owner, parent, value);
   }
   if (value instanceof Set) {
     return new SetDependency(owner, parent, value);

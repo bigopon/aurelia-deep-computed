@@ -3,7 +3,8 @@ import {
   Disposable,
   InternalPropertyObserver,
   Expression,
-  ObserverLocator
+  ObserverLocator,
+  ICollectionObserverSplice
 } from "aurelia-binding";
 import { TaskQueue } from "aurelia-framework";
 import { ComputedExpression } from "./deep-computed-expression";
@@ -50,7 +51,8 @@ declare module 'aurelia-binding' {
 
 export type ICallable = Function | { call(...args: any[]): void; };
 
-export interface IDeepComputedObserver {
+export interface IComputedObserver {
+  readonly deep: boolean;
   readonly observerLocator: ObserverLocator;
   handleChange(dep: IDependency): void;
 }
@@ -59,7 +61,7 @@ export interface IDependency {
   /**
    * Root observer/dep of this dep
    */
-  owner: IDeepComputedObserver;
+  owner: IComputedObserver;
   /**
    * The parent dep of this dep. Represents the owner object of the object associated with this dep
    */
@@ -75,7 +77,7 @@ export interface IDependency {
   /**
    * collect sub dependencies of this dependency value
    */
-  collect(deep?: boolean): void;
+  collect(): void;
   /**
    * Start observing: Connect all sub dependencies to the root observer
    */
@@ -84,4 +86,10 @@ export interface IDependency {
    * Release all sub dependencies of this dependency
    */
   release(): void;
+}
+
+export interface ICollectionDependency extends IDependency {
+  observer: ICollectionObserver;
+  subscribeContext: string;
+  call(context: string, changeRecords: ICollectionObserverSplice[]): void;
 }

@@ -44,7 +44,7 @@ export function deepComputedFrom(...expressions: string[]) {
     (descriptor as DeepComputedFromPropertyDescriptor).get.computed = {
       deep: true,
       deps: expressions,
-    }
+    };
     return descriptor;
   } as MethodDecorator;
 }
