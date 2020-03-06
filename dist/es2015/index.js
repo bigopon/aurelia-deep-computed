@@ -1,5 +1,276 @@
 import { createOverrideContext, subscriberCollection, connectable as connectable$1, Expression, ObserverLocator, Parser } from 'aurelia-binding';
 
+/**@internal */
+const releaseDep = (dep) => {
+    dep.release();
+};
+/**@internal */
+const observeDep = (dep) => {
+    dep.observe();
+};
+// for Aurelia binding subscriber, a context is required if it's not a function
+const objectPropDepContext = 'context:object_prop_dep';
+const arrayDepContext = 'context:array_dep';
+const setDepContext = 'context:set_dep';
+const mapDepContext = 'context:map_dep';
+class ObjectDependency {
+    constructor(owner, parent, value) {
+        this.owner = owner;
+        this.parent = parent;
+        this.value = value;
+        this.deps = new Map();
+        this.connected = false;
+    }
+    collect() {
+        const value = this.value;
+        Object.keys(value).forEach(prop => {
+            const propertyDep = new ObjectPropertyDependency(this.owner, this, prop, value[prop]);
+            this.deps.set(prop, propertyDep);
+            propertyDep.collect();
+        });
+    }
+    observe() {
+        this.deps.forEach(observeDep);
+        this.connected = true;
+    }
+    release() {
+        this.deps.forEach(releaseDep);
+        this.connected = false;
+    }
+}
+const emptyMap = new Map();
+class ObjectPropertyDependency {
+    constructor(owner, parent, property, value) {
+        this.owner = owner;
+        this.parent = parent;
+        this.property = property;
+        this.value = value;
+        // object property has only 1 dep, there's no need to create a map
+        // so use an empty map instead
+        this.deps = emptyMap;
+        this.connected = false;
+    }
+    collect() {
+        this.dep = void 0;
+        const owner = this.owner;
+        const deep = owner.deep;
+        if (!deep) {
+            return;
+        }
+        const valueDep = getDependency(owner, this, this.value);
+        if (valueDep == null) {
+            return;
+        }
+        this.dep = valueDep;
+        valueDep.collect();
+    }
+    observe() {
+        let observer = this.observer;
+        if (observer == null) {
+            observer
+                = this.observer
+                    = this
+                        .owner
+                        .observerLocator
+                        .getObserver(this.parent.value, this.property);
+        }
+        observer.subscribe(objectPropDepContext, this);
+        const dep = this.dep;
+        if (dep != null) {
+            dep.observe();
+        }
+        this.connected = true;
+    }
+    release() {
+        const observer = this.observer;
+        if (observer != null) {
+            observer.unsubscribe(objectPropDepContext, this);
+            this.observer = void 0;
+        }
+        const dep = this.dep;
+        if (dep != null) {
+            dep.release();
+            this.dep = void 0;
+        }
+        this.connected = false;
+    }
+    call() {
+        // when property change
+        // 1. release all sub-deps
+        this.release();
+        // 2. re-evaluate the value
+        this.value = this.parent.value[this.property];
+        // 3. re-collect deps
+        this.collect();
+        this.observe();
+        // 4. notify the owner
+        this.owner.handleChange(this);
+    }
+}
+class BaseCollectionDependency {
+    constructor() {
+        this.deps = new Map();
+        this.connected = false;
+    }
+    observe() {
+        let observer = this.observer;
+        if (observer == null) {
+            observer = this.observer = this.getObserver();
+        }
+        observer.subscribe(this.subscribeContext, this);
+        this.deps.forEach(observeDep);
+        this.connected = true;
+    }
+    release() {
+        const observer = this.observer;
+        if (observer != null) {
+            observer.unsubscribe(arrayDepContext, this);
+            this.observer = void 0;
+        }
+        this.deps.forEach(releaseDep);
+        this.deps.clear();
+        this.connected = false;
+    }
+    // todo: more efficient dep recollection
+    call(context, changeRecords) {
+        // when array is mutated
+        // 1. release
+        this.release();
+        // 2. recollect
+        this.collect();
+        this.observe();
+        // 3. notify owner
+        this.owner.handleChange(this);
+    }
+}
+class ArrayDependency extends BaseCollectionDependency {
+    constructor(owner, parent, value) {
+        super();
+        this.owner = owner;
+        this.parent = parent;
+        this.value = value;
+        this.subscribeContext = arrayDepContext;
+    }
+    getObserver() {
+        return this
+            .owner
+            .observerLocator
+            .getArrayObserver(this.value);
+    }
+    collect() {
+        const owner = this.owner;
+        const deep = owner.deep;
+        const deps = this.deps;
+        if (!deep) {
+            return;
+        }
+        for (let i = 0, arr = this.value, ii = arr.length; ii > i; ++i) {
+            let value = arr[i];
+            const dep = getDependency(owner, this, value);
+            // if an index is not observable
+            // just ignore
+            if (dep == void 0) {
+                return;
+            }
+            const existingDep = deps.get(i);
+            if (existingDep) {
+                existingDep.release();
+            }
+            deps.set(i, dep);
+            dep.collect();
+        }
+    }
+}
+class MapDependency extends BaseCollectionDependency {
+    constructor(owner, parent, value) {
+        super();
+        this.owner = owner;
+        this.parent = parent;
+        this.value = value;
+        this.subscribeContext = mapDepContext;
+    }
+    getObserver() {
+        return this
+            .owner
+            .observerLocator
+            .getMapObserver(this.value);
+    }
+    collect() {
+        const owner = this.owner;
+        const deep = owner.deep;
+        const deps = this.deps;
+        if (!deep) {
+            return;
+        }
+        this.value.forEach((value, key) => {
+            const dep = getDependency(owner, this, value);
+            if (dep == void 0) {
+                return;
+            }
+            const existingDep = deps.get(key);
+            if (existingDep) {
+                existingDep.release();
+            }
+            // incorrect to typings, but safe
+            deps.set(key, dep);
+            dep.collect();
+        });
+    }
+}
+class SetDependency extends BaseCollectionDependency {
+    constructor(owner, parent, value) {
+        super();
+        this.owner = owner;
+        this.parent = parent;
+        this.value = value;
+        this.subscribeContext = setDepContext;
+    }
+    getObserver() {
+        return this
+            .owner
+            .observerLocator
+            .getSetObserver(this.value);
+    }
+    collect() {
+        const owner = this.owner;
+        const deep = owner.deep;
+        const deps = this.deps;
+        if (!deep) {
+            return;
+        }
+        this.value.forEach(value => {
+            const dep = getDependency(owner, this, value);
+            if (dep == void 0) {
+                return;
+            }
+            const existingDep = deps.get(value);
+            if (existingDep) {
+                existingDep.release();
+            }
+            deps.set(value, dep);
+            if (deep) {
+                dep.collect();
+            }
+        });
+    }
+}
+function getDependency(owner, parent, value) {
+    const valueType = typeof value;
+    if (value == null || valueType === 'boolean' || valueType === 'number' || valueType === 'string' || valueType === 'symbol' || valueType === 'bigint' || typeof value === 'function') {
+        return;
+    }
+    if (Array.isArray(value)) {
+        return new ArrayDependency(owner, parent, value);
+    }
+    if (value instanceof Map) {
+        return new MapDependency(owner, parent, value);
+    }
+    if (value instanceof Set) {
+        return new SetDependency(owner, parent, value);
+    }
+    return new ObjectDependency(owner, parent, value);
+}
+
 // it looks better using @...(), so we cast to any instead of ClassDecorator
 // aurelia decorators support both usage: with and without parens
 const connectable = connectable$1;
@@ -19,10 +290,11 @@ class DeepComputedObserver {
     //  - a thin layer wrapping around getting/setting value of the targeted computed property
     //  - an abstraction for dealing with a list of declared dependencies and their corresponding value
     //    that uses existing Aurelia binding capabilities
-    expression, observerLocator) {
+    expression, observerLocator, deep) {
         this.obj = obj;
         this.expression = expression;
         this.observerLocator = observerLocator;
+        this.deep = deep;
         /**
          * @internal
          */
@@ -98,13 +370,15 @@ class DeepComputedObserver {
     /**
      * @internal
      */
-    handleChange(dep, collect) {
+    handleChange(dep) {
+        const notifyingDeps = this.notifyingDeps;
+        if (notifyingDeps.indexOf(dep) === -1) {
+            notifyingDeps.push(dep);
+        }
         if (this.isQueued) {
             return;
         }
-        if (this.notifyingDeps.indexOf(dep) === -1) {
-            this.notifyingDeps.push(dep);
-        }
+        this.isQueued = true;
         this.observerLocator.taskQueue.queueMicroTask(this);
     }
     /**
@@ -135,192 +409,6 @@ class DeepComputedObserver {
 // use this instead of decorator to avoid extra generated code
 connectable()(DeepComputedObserver);
 subscriberCollection()(DeepComputedObserver);
-const releaseDep = (dep) => {
-    dep.release();
-};
-const observeDep = (dep) => {
-    dep.observe();
-};
-// for Aurelia binding subscriber, a context is required if it's not a function
-const objectPropDepContext = 'context:object_prop_dep';
-const arrayDepContext = 'context:array_dep';
-class ObjectDependency {
-    constructor(owner, parent, value) {
-        this.owner = owner;
-        this.parent = parent;
-        this.value = value;
-        this.deps = new Map();
-        this.connected = false;
-    }
-    collect() {
-        const value = this.value;
-        Object.keys(value).forEach(prop => {
-            const propertyDep = new ObjectPropertyDependency(this.owner, this, prop, value[prop]);
-            this.deps.set(prop, propertyDep);
-            propertyDep.collect();
-        });
-    }
-    observe() {
-        this.deps.forEach(observeDep);
-        this.connected = true;
-    }
-    release() {
-        this.deps.forEach(releaseDep);
-        this.connected = false;
-    }
-}
-class ObjectPropertyDependency {
-    constructor(owner, parent, property, value) {
-        this.owner = owner;
-        this.parent = parent;
-        this.property = property;
-        this.value = value;
-        this.deps = new Map();
-        this.connected = false;
-    }
-    collect() {
-        const valueDep = getDependency(this.owner, this, this.value);
-        if (valueDep == null) {
-            return;
-        }
-        this.deps.set(this, valueDep);
-        valueDep.collect();
-    }
-    observe() {
-        let observer = this.observer;
-        if (observer == null) {
-            observer
-                = this.observer
-                    = this
-                        .owner
-                        .observerLocator
-                        .getObserver(this.parent.value, this.property);
-        }
-        observer.subscribe(objectPropDepContext, this);
-        this.deps.forEach(observeDep);
-        this.connected = true;
-    }
-    release() {
-        const observer = this.observer;
-        if (observer != null) {
-            observer.unsubscribe(objectPropDepContext, this);
-            this.observer = void 0;
-        }
-        this.deps.forEach(releaseDep);
-        this.deps.clear();
-        this.connected = false;
-    }
-    call() {
-        // when property change
-        // 1. release all sub-deps
-        this.release();
-        // 2. re-evaluate the value
-        this.value = this.parent.value[this.property];
-        // 3. re-collect deps
-        this.collect();
-        this.observe();
-        // 4. notify the owner
-        this.owner.handleChange(this, /* should recollect everything? */ false);
-    }
-}
-class ArrayDependency {
-    constructor(owner, parent, value) {
-        this.owner = owner;
-        this.parent = parent;
-        this.value = value;
-        this.deps = new Map();
-        this.connected = false;
-    }
-    collect() {
-        for (let i = 0, arr = this.value, ii = arr.length; ii > i; ++i) {
-            let value = arr[i];
-            const dep = getDependency(this.owner, this, value);
-            // if an index is not observable
-            // just ignore
-            if (dep == void 0) {
-                return;
-            }
-            this.deps.set(i, dep);
-            dep.collect();
-        }
-    }
-    observe() {
-        let observer = this.observer;
-        if (observer == null) {
-            observer
-                = this.observer
-                    = this
-                        .owner
-                        .observerLocator
-                        .getArrayObserver(this.value);
-        }
-        observer.subscribe(arrayDepContext, this);
-        this.deps.forEach(observeDep);
-        this.connected = true;
-    }
-    release() {
-        const observer = this.observer;
-        if (observer != null) {
-            observer.unsubscribe(arrayDepContext, this);
-            this.observer = void 0;
-        }
-        this.deps.forEach(releaseDep);
-        this.deps.clear();
-        this.connected = false;
-    }
-    call(changeRecords) {
-        // when array is mutated
-        // 1. release
-        this.release();
-        // 2. recollect
-        this.collect();
-        this.observe();
-        // 3. notify owner
-        this.owner.handleChange(this, true);
-    }
-}
-class SetDependency {
-    constructor(owner, parent, set) {
-        this.owner = owner;
-        this.parent = parent;
-        this.set = set;
-        this.deps = new Map();
-        this.connected = false;
-    }
-    collect() {
-        this.set.forEach(value => {
-            const dep = getDependency(this.owner, this, value);
-            if (dep == void 0) {
-                return;
-            }
-            dep.collect();
-            // incorrect to typings, but safe
-            this.deps.set(value, dep);
-        });
-    }
-    observe() {
-        this.deps.forEach(observeDep);
-        this.connected = true;
-    }
-    release() {
-        this.deps.forEach(releaseDep);
-        this.deps.clear();
-        this.connected = false;
-    }
-}
-function getDependency(owner, parent, value) {
-    const valueType = typeof value;
-    if (value == null || valueType === 'boolean' || valueType === 'number' || valueType === 'string' || valueType === 'symbol' || valueType === 'bigint' || typeof value === 'function') {
-        return;
-    }
-    if (Array.isArray(value)) {
-        return new ArrayDependency(owner, parent, value);
-    }
-    if (value instanceof Set) {
-        return new SetDependency(owner, parent, value);
-    }
-    return new ObjectDependency(owner, parent, value);
-}
 
 class ComputedExpression extends Expression {
     constructor(name, dependencies) {
@@ -354,11 +442,14 @@ class ComputedExpression extends Expression {
 function configure(config) {
     // need to run at post task to ensure we don't resolve everything too early
     config.postTask(() => {
-        const observerLocator = config.container.get(ObserverLocator);
-        const parser = config.container.get(Parser);
+        const container = config.container;
+        const observerLocator = container.get(ObserverLocator);
+        const parser = container.get(Parser);
+        // addAdapter is a hook from observer locator to deal with computed properties (getter/getter + setter)
         observerLocator.addAdapter({
             getObserver: (obj, propertyName, descriptor) => {
-                if (descriptor.get.deep) {
+                const computedOptions = descriptor.get.computed;
+                if (computedOptions) {
                     return createComputedObserver(obj, propertyName, descriptor, observerLocator, parser);
                 }
                 return null;
@@ -368,27 +459,37 @@ function configure(config) {
 }
 function deepComputedFrom(...expressions) {
     return function (target, key, descriptor) {
-        const $descriptor = descriptor;
-        const getterFn = $descriptor.get;
-        getterFn.deep = true;
-        getterFn.deps = expressions;
-        getterFn.computedExpression = void 0;
+        descriptor.get.computed = {
+            deep: true,
+            deps: expressions,
+        };
+        return descriptor;
+    };
+}
+function shallowComputedFrom(...expressions) {
+    return function (target, key, descriptor) {
+        descriptor.get.computed = {
+            deep: false,
+            deps: expressions
+        };
         return descriptor;
     };
 }
 function createComputedObserver(obj, propertyName, descriptor, observerLocator, parser) {
-    let computedExpression = descriptor.get.computedExpression;
+    const getterFn = descriptor.get;
+    const computedOptions = getterFn.computed;
+    let computedExpression = computedOptions.computedExpression;
     if (!(computedExpression instanceof ComputedExpression)) {
-        let dependencies = descriptor.get.deps;
+        let dependencies = computedOptions.deps;
         let i = dependencies.length;
-        const parsedDeps = descriptor.get.parsedDeps = Array(dependencies.length);
+        const parsedDeps = computedOptions.parsedDeps = Array(dependencies.length);
         while (i--) {
             parsedDeps[i] = parser.parse(dependencies[i]);
         }
-        computedExpression = descriptor.get.computedExpression = new ComputedExpression(propertyName, parsedDeps);
+        computedExpression = computedOptions.computedExpression = new ComputedExpression(propertyName, parsedDeps);
     }
-    return new DeepComputedObserver(obj, computedExpression, observerLocator);
+    return new DeepComputedObserver(obj, computedExpression, observerLocator, computedOptions.deep);
 }
 
-export { DeepComputedObserver, configure, deepComputedFrom };
+export { DeepComputedObserver, configure, deepComputedFrom, shallowComputedFrom };
 //# sourceMappingURL=index.js.map
