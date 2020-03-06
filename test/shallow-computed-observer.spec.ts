@@ -2,7 +2,7 @@ import './setup';
 import { deepComputedFrom, shallowComputedFrom } from "../src";
 import { bootstrapComponent } from "./utils";
 
-fdescribe('shallow-computed-observer.spec.ts', () => {
+describe('shallow-computed-observer.spec.ts', () => {
 
   interface IModel {
     coins: {

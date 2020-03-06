@@ -34,6 +34,10 @@ export async function bootstrapComponent<T>(ViewModel: Constructable<T>, View: s
   return {
     host,
     viewModel: root.viewModel as T,
-    taskQueue: aurelia.container.get(TaskQueue)
+    taskQueue: aurelia.container.get(TaskQueue),
+    dispose: () => {
+      root.detached();
+      root.unbind();
+    }
   };
 }
