@@ -1,5 +1,5 @@
 import './setup';
-import { deepComputedFrom } from "../src";
+import { deepComputedFrom, ComputedObserver } from "../src";
 import { bootstrapComponent } from "./utils";
 
 describe('deep-computed-observer.spec.ts', () => {
@@ -14,6 +14,7 @@ describe('deep-computed-observer.spec.ts', () => {
 
       @deepComputedFrom('data')
       get json() {
+        debugger
         this.jsonCallCount++;
         return JSON.stringify(this.data);
       }
@@ -162,5 +163,108 @@ describe('deep-computed-observer.spec.ts', () => {
 
       dispose();
     });
+  });
+
+  describe('with cache', () => {
+    for (const cache of [true, false]) {
+      it(`works with object/getter when [cache:${cache}]`, async () => {
+        class App {
+          // input element to trigger extra evaluation for testing cache
+          static $view = '<template>${json}<input value.to-view=json></template>';
+    
+          data = { a: 5, b: 6 };
+    
+          jsonCallCount = 0;
+    
+          @deepComputedFrom({
+            deps: ['data'],
+            cache: cache
+          })
+          get json() {
+            this.jsonCallCount++;
+            return JSON.stringify(this.data);
+          }
+        }
+    
+        const { viewModel, host, taskQueue, dispose } = await bootstrapComponent(App);
+        expect(host.textContent).toBe(JSON.stringify(viewModel.data));
+        // there are 2 access calls to the getter
+        // 1 is from initial value evaluation, and another is for when setting up the observer
+        expect(viewModel.jsonCallCount).toBe(cache ? 2 : 3, 'initial');
+    
+        viewModel.data.a++;
+        taskQueue.flushMicroTaskQueue();
+        expect(viewModel.jsonCallCount).toBe(cache ? 3 : 6);
+        expect(host.textContent).toBe(JSON.stringify({ a: 6, b: 6 }));
+    
+        dispose();
+      });
+
+      it(`works with object + getter/setter when [cache:${cache}]`, async () => {
+        class App {
+          // using if to test unsubscribe
+          static $view = '<template><template if.bind="show">${json}<input value.to-view=json></template></template>';
+
+          show = true;
+          data = { a: 5, b: 6 };
+
+          jsonCallCount = 0;
+
+          @deepComputedFrom({
+            deps: ['data'],
+            cache: cache
+          })
+          get json() {
+            this.jsonCallCount++;
+            return JSON.stringify(this.data);
+          }
+
+          set json(v: string) {
+            const data = JSON.parse(v);
+            this.data = data;
+          }
+        }
+
+        const { viewModel, host, taskQueue, observerLocator, dispose } = await bootstrapComponent(App);
+        expect(host.textContent).toBe(JSON.stringify(viewModel.data));
+        // there are 2 access calls to the getter
+        // 1 is from initial value evaluation, and another is for when setting up the observer
+        expect(viewModel.jsonCallCount).toBe(cache ? 2 : 3, 'initial');
+
+        viewModel.data.a++;
+        taskQueue.flushMicroTaskQueue();
+        expect(viewModel.jsonCallCount).toBe(cache ? 3 : 6, 'after a++');
+        expect(host.textContent).toBe(JSON.stringify({ a: 6, b: 6 }));
+
+        viewModel.json = JSON.stringify({ a: 1, b: 2 });
+        expect(viewModel.jsonCallCount).toBe(cache ? 3 : 6, 'immediately after new assignment');
+        expect(host.textContent).toBe(JSON.stringify({ a: 6, b: 6 }));
+
+        taskQueue.flushMicroTaskQueue();
+        expect(viewModel.jsonCallCount).toBe(cache ? 4 : 9, 'after assignment flush queue');
+        expect(host.textContent).toBe(JSON.stringify({ a: 1, b: 2 }));
+
+        for (let i = 0; 10 > i; ++i) {
+          viewModel.json;
+        }
+        expect(viewModel.jsonCallCount).toBe(cache ? 4 : 19, 'after 10 read (with subs)');
+
+        viewModel.show = false;
+        taskQueue.flushMicroTaskQueue();
+        expect(viewModel.jsonCallCount).toBe(cache ? 4 : 19);
+
+        for (let i = 0; 10 > i; ++i) {
+          viewModel.json;
+        }
+
+        const observer = observerLocator.getObserver(viewModel, 'json') as ComputedObserver;
+        debugger
+        expect(observer.hasSubscribers()).toBe(false, 'no subscribers');
+        expect(observer['observing']).toBe(false, 'not observing');
+        expect(viewModel.jsonCallCount).toBe(cache ? 14 : 29, 'after 10 read (without subs)');
+
+        dispose();
+      });
+    }
   });
 });

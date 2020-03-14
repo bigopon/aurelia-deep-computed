@@ -1,4 +1,4 @@
-import { Aurelia, Controller, TaskQueue } from 'aurelia-framework';
+import { Aurelia, Controller, TaskQueue, ObserverLocator } from 'aurelia-framework';
 import { configure as configureDeepComputed } from '../src';
 
 interface Constructable<T> {
@@ -35,6 +35,7 @@ export async function bootstrapComponent<T>(ViewModel: Constructable<T>, View: s
     host,
     viewModel: root.viewModel as T,
     taskQueue: aurelia.container.get(TaskQueue),
+    observerLocator: aurelia.container.get(ObserverLocator),
     dispose: () => {
       root.detached();
       root.unbind();

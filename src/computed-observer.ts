@@ -21,7 +21,7 @@ import { getDependency, releaseDep } from './dependency';
 /**
  * @internal The interface describes methods added by `connectable` & `subscriberCollection` decorators
  */
-export interface DeepComputedObserver extends Binding {
+export interface ComputedObserver extends Binding {
   _version: number;
   addSubscriber(callable: (...args: any[]) => void): boolean;
   addSubscriber(context: string, callable: ICallable): boolean;
@@ -47,7 +47,7 @@ const emptyLookupFunctions = {
 
 const unset = {};
 
-export class DeepComputedObserver {
+export class ComputedObserver {
 
   /**
    * @internal
@@ -73,6 +73,21 @@ export class DeepComputedObserver {
    */
   private readonly notifyingDeps: IDependency[] = [];
 
+  /**
+   * Only used when the observer is config to cache read
+   */
+  private currentValue: any;
+
+  /**
+   * @internal
+   */
+  private $get: () => any;
+
+  /**
+   * @internal
+   */
+  private observing: boolean;
+
   constructor(
     public obj: object,
     /**
@@ -84,28 +99,53 @@ export class DeepComputedObserver {
     //    that uses existing Aurelia binding capabilities
     public expression: ComputedExpression,
     public observerLocator: ObserverLocator,
-    public deep: boolean
+    private descriptor: PropertyDescriptor,
+    public deep: boolean,
+    public cache: boolean,
   ) {
     this.scope = { bindingContext: obj, overrideContext: createOverrideContext(obj) };
+    if (cache) {
+      const propertyName = expression.name;
+      Object.defineProperty(obj, propertyName, {
+        get: () => {
+          // not observing === no track === no confidence that the current value is correct
+          return this.observing ? this.currentValue : this.$get();
+        },
+        set: descriptor.set,
+        configurable: true,
+        enumerable: true
+      });
+      this.$get = () => {
+        return descriptor.get.call(obj);
+      };
+    } else {
+      this.$get = () => {
+        return expression.evaluate(this.scope, emptyLookupFunctions);
+      };
+    }
   }
 
   getValue(): any {
-    return this.expression.evaluate(this.scope, emptyLookupFunctions);
+    return this.cache && this.observing
+      ? this.currentValue
+      : this.$get();
   }
 
   setValue(newValue: any): void {
+    // supports getter
     this.expression.assign(this.scope, newValue, emptyLookupFunctions);
   }
 
   subscribe(context: (...args: any[]) => any): Disposable;
   subscribe(context: string | ICallable, callable?: ICallable): void | Disposable {
     if (!this.hasSubscribers()) {
-      this.oldValue = this.expression.evaluate(this.scope, emptyLookupFunctions);
+      this.oldValue = this.$get();
       this.expression.connect(
         /* @connectable makes this class behave as Binding */this,
         this.scope
       );
       this.observeDeps();
+      this.observing = true;
     }
     this.addSubscriber(context, callable);
     // scenario where this observer is created manually via ObserverLocator.getObserver
@@ -120,6 +160,7 @@ export class DeepComputedObserver {
 
   unsubscribe(context: string | ICallable, callable?: ICallable): void {
     if (this.removeSubscriber(context, callable) && !this.hasSubscribers()) {
+      this.observing = false;
       this.unobserveDeps();
       this.unobserve(true);
       this.oldValue = unset;
@@ -128,11 +169,11 @@ export class DeepComputedObserver {
   }
 
   call() {
-    let newValue = this.expression.evaluate(this.scope, emptyLookupFunctions);
+    let newValue = this.currentValue = this.$get();
     let oldValue = this.oldValue;
     if (newValue !== oldValue) {
       this.oldValue = newValue;
-      this.callSubscribers(newValue, oldValue);
+      this.callSubscribers(newValue, oldValue === unset ? undefined : oldValue);
     }
     if (this.isQueued) {
       this.notifyingDeps.forEach(dep => {
@@ -197,5 +238,5 @@ export class DeepComputedObserver {
 }
 
 // use this instead of decorator to avoid extra generated code
-connectable()(DeepComputedObserver);
-subscriberCollection()(DeepComputedObserver);
+connectable()(ComputedObserver);
+subscriberCollection()(ComputedObserver);

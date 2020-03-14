@@ -22,6 +22,10 @@ export type ICollectionObserver = InternalCollectionObserver & {
 export interface IComputedOptions {
   deep: boolean;
   deps: string[];
+  cache: boolean;
+}
+
+export interface IProcessedComputedOptions extends IComputedOptions {
   /**
    * Used to cache parsed expression from declared dependency
    */
