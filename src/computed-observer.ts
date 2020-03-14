@@ -106,10 +106,12 @@ export class ComputedObserver {
     //    that uses existing Aurelia binding capabilities
     public expression: ComputedExpression,
     public observerLocator: ObserverLocator,
-    private descriptor: PropertyDescriptor,
-    private computedOptions: IComputedOptions
+    descriptor: PropertyDescriptor,
+    computedOptions: IComputedOptions
   ) {
     this.scope = { bindingContext: obj, overrideContext: createOverrideContext(obj) };
+    this.deep = computedOptions.deep;
+    this.cache = computedOptions.cache;
     if (computedOptions.cache) {
       const propertyName = expression.name;
       const getterFn = (() => 

@@ -41,7 +41,7 @@ export function configure(config: FrameworkConfiguration): void {
   });
 }
 
-export function deepComputedFrom(options: Partial<IComputedOptions>): MethodDecorator;
+export function deepComputedFrom(options: Partial<Omit<IComputedOptions, 'deep'>>): MethodDecorator;
 export function deepComputedFrom(...expressions: string[]): MethodDecorator;
 export function deepComputedFrom(...args: (Partial<IComputedOptions> | string)[]) {
   return function (target: any, key: any, descriptor: PropertyDescriptor) {
@@ -50,7 +50,7 @@ export function deepComputedFrom(...args: (Partial<IComputedOptions> | string)[]
   } as MethodDecorator;
 }
 
-export function shallowComputedFrom(options: Partial<IComputedOptions>): MethodDecorator;
+export function shallowComputedFrom(options: Partial<Omit<IComputedOptions, 'deep'>>): MethodDecorator;
 export function shallowComputedFrom(...expressions: string[]): MethodDecorator;
 export function shallowComputedFrom(...args: (Partial<IComputedOptions> | string)[]) {
   return function (target: any, key: any, descriptor: PropertyDescriptor) {

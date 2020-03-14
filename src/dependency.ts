@@ -162,7 +162,7 @@ abstract class BaseCollectionDependency implements ICollectionDependency {
   release(): void {
     const observer = this.observer;
     if (observer != null) {
-      observer.unsubscribe(arrayDepContext, this);
+      observer.unsubscribe(this.subscribeContext, this);
       this.observer = void 0;
     }
     this.deps.forEach(releaseDep);
