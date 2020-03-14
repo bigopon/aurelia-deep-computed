@@ -80,6 +80,38 @@ Rendered text will be:
 {"name":{"first":"b","last":"g"},"address":{"number":80,"unit":9}}
 ```
 
+#### With `cache`:
+One of the problems with getter function is that the value the function will be executed everytime the property is accessed. This could be an issue if the getter function takes a lot of time to complete. This plugin provides a way to overcome this, with an option name `cache`. If `cache` is on, the observer created for a getter function will assume that the value of the getter function will solely depend on the dependencies you gave it. And with this assumption, the observer will be able to efficiently cache the value from the last time it ran the getter function, unless there has been some changes in one of its observed dependencies.
+
+__**One important caveat**__ of this is that it will only cache when it has start observing. This typically means if the view model/model that has an computed observer and is not yet connected to a view, it will still execute the getter function every time the property is accessed, as it cannot safely assume otherwise.
+
+An example of cache usage would be:
+```ts
+class App {
+
+  data = { name: { first: 'bi', last: 'go' }, address: { number: 80, unit: 9 } }
+
+  @deepComputedFrom({
+    deps: ['data'],
+    cache: true
+  })
+  get contactDeep() {
+    console.log('deep');
+    return JSON.stringify(this.data);
+  }
+
+  @shallowComputedFrom({
+    deps: ['data'],
+    cache: true
+  })
+  get contactShallow() {
+    console.log('shallow');
+    return JSON.stringify(this.data);
+  }
+}
+```
+After the observer started observing, no matter how many times you read `contactDeep` or `contactShallow` properties, `console.log('deep')` or `console.log('shallow')` will be called only once.
+
 ### Notes
 
 Both decorator exports of this pluginare dropin replacement for built-in decorator `computedFrom`, as following example:
