@@ -1,6 +1,6 @@
 {
   "name": "aurelia-deep-computed",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A plugin to declare deep computed dependencies with ability to watch recursively for changes",
   "license": "MIT",
   "author": "Binh Vo <bigopon.777@gmail.com> (https://github.com/bigopon)",
