@@ -2,7 +2,7 @@ import './setup';
 import { deepComputedFrom, ComputedObserver } from "../src";
 import { bootstrapComponent } from "./utils";
 
-describe('deep-computed-observer.spec.ts', () => {
+fdescribe('deep-computed-observer.spec.ts', () => {
 
   it('works with getter', async () => {
     class App {
@@ -14,7 +14,6 @@ describe('deep-computed-observer.spec.ts', () => {
 
       @deepComputedFrom('data')
       get json() {
-        debugger
         this.jsonCallCount++;
         return JSON.stringify(this.data);
       }
@@ -155,7 +154,8 @@ describe('deep-computed-observer.spec.ts', () => {
       taskQueue.flushMicroTaskQueue();
       expect(viewModel.jsonCallCount).toBe(8);
       expect(host.textContent).toBe(JSON.stringify([['price', { direction: 'asc' }]]));
-      
+
+      debugger;
       (viewModel.sort.get('price') as any).direction = 'desc';
       taskQueue.flushMicroTaskQueue();
       expect(viewModel.jsonCallCount).toBe(10);
@@ -171,11 +171,11 @@ describe('deep-computed-observer.spec.ts', () => {
         class App {
           // input element to trigger extra evaluation for testing cache
           static $view = '<template>${json}<input value.to-view=json></template>';
-    
+
           data = { a: 5, b: 6 };
-    
+
           jsonCallCount = 0;
-    
+
           @deepComputedFrom({
             deps: ['data'],
             cache: cache
@@ -185,7 +185,7 @@ describe('deep-computed-observer.spec.ts', () => {
             return JSON.stringify(this.data);
           }
         }
-    
+
         const { viewModel, host, taskQueue, dispose } = await bootstrapComponent(App);
         expect(host.textContent).toBe(JSON.stringify(viewModel.data));
         // there are 2 access calls to the getter
@@ -196,7 +196,7 @@ describe('deep-computed-observer.spec.ts', () => {
         taskQueue.flushMicroTaskQueue();
         expect(viewModel.jsonCallCount).toBe(cache ? 3 : 6);
         expect(host.textContent).toBe(JSON.stringify({ a: 6, b: 6 }));
-    
+
         dispose();
       });
 
@@ -251,6 +251,7 @@ describe('deep-computed-observer.spec.ts', () => {
 
         viewModel.show = false;
         taskQueue.flushMicroTaskQueue();
+        expect(host.textContent.trim()).toBe('', 'no text content');
         expect(viewModel.jsonCallCount).toBe(cache ? 4 : 19);
 
         for (let i = 0; 10 > i; ++i) {
@@ -258,7 +259,6 @@ describe('deep-computed-observer.spec.ts', () => {
         }
 
         const observer = observerLocator.getObserver(viewModel, 'json') as ComputedObserver;
-        debugger
         expect(observer.hasSubscribers()).toBe(false, 'no subscribers');
         expect(observer['observing']).toBe(false, 'not observing');
         expect(viewModel.jsonCallCount).toBe(cache ? 14 : 29, 'after 10 read (without subs)');

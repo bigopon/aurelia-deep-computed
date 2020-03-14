@@ -5,6 +5,8 @@ interface Constructable<T> {
   new (...args: any[]): T;
 }
 
+let $taskQueue: TaskQueue | undefined;
+
 export async function bootstrapComponent<T>(ViewModel: Constructable<T>, View: string = '', extraResources: any[] = []) {
   const aurelia = new Aurelia();
   aurelia.use
@@ -27,6 +29,12 @@ export async function bootstrapComponent<T>(ViewModel: Constructable<T>, View: s
     klass['$view'] = View;
   }
 
+  if (!$taskQueue) {
+    $taskQueue = aurelia.container.get(TaskQueue);
+  } else {
+    aurelia.container.registerInstance(TaskQueue, $taskQueue);
+  }
+
   await aurelia.start();
   await aurelia.setRoot(klass, host);
 
@@ -34,9 +42,10 @@ export async function bootstrapComponent<T>(ViewModel: Constructable<T>, View: s
   return {
     host,
     viewModel: root.viewModel as T,
-    taskQueue: aurelia.container.get(TaskQueue),
+    taskQueue: $taskQueue,
     observerLocator: aurelia.container.get(ObserverLocator),
     dispose: () => {
+      $taskQueue.flushMicroTaskQueue();
       root.detached();
       root.unbind();
     }
