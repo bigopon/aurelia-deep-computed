@@ -7,12 +7,12 @@ import {
   InternalPropertyObserver,
 } from 'aurelia-binding';
 import {
-  DeepComputedFromPropertyDescriptor,
+  ComputedFromPropertyDescriptor,
   IProcessedComputedOptions,
   IComputedOptions,
 } from './definitions';
 import { ComputedObserver } from './computed-observer';
-import { ComputedExpression } from './deep-computed-expression';
+import { ComputedExpression } from './computed-expression';
 
 export {
   ComputedObserver,
@@ -30,7 +30,7 @@ export function configure(config: FrameworkConfiguration): void {
     const parser = container.get(Parser);
     // addAdapter is a hook from observer locator to deal with computed properties (getter/getter + setter)
     observerLocator.addAdapter({
-      getObserver: (obj, propertyName, descriptor: DeepComputedFromPropertyDescriptor): InternalPropertyObserver => {
+      getObserver: (obj, propertyName, descriptor: ComputedFromPropertyDescriptor): InternalPropertyObserver => {
         const computedOptions = descriptor.get.computed;
         if (computedOptions) {
           return createComputedObserver(obj, propertyName, descriptor, observerLocator, parser);
@@ -45,7 +45,7 @@ export function deepComputedFrom(options: Partial<IComputedOptions>): MethodDeco
 export function deepComputedFrom(...expressions: string[]): MethodDecorator;
 export function deepComputedFrom(...args: (Partial<IComputedOptions> | string)[]) {
   return function (target: any, key: any, descriptor: PropertyDescriptor) {
-    (descriptor as DeepComputedFromPropertyDescriptor).get.computed = buildOptions(args, true);
+    (descriptor as ComputedFromPropertyDescriptor).get.computed = buildOptions(args, true);
     return descriptor;
   } as MethodDecorator;
 }
@@ -54,7 +54,7 @@ export function shallowComputedFrom(options: Partial<IComputedOptions>): MethodD
 export function shallowComputedFrom(...expressions: string[]): MethodDecorator;
 export function shallowComputedFrom(...args: (Partial<IComputedOptions> | string)[]) {
   return function (target: any, key: any, descriptor: PropertyDescriptor) {
-    (descriptor as DeepComputedFromPropertyDescriptor).get.computed = buildOptions(args, false);
+    (descriptor as ComputedFromPropertyDescriptor).get.computed = buildOptions(args, false);
     return descriptor;
   };
 }
@@ -77,7 +77,7 @@ function buildOptions(args: (Partial<IComputedOptions> | string)[], deep: boolea
 function createComputedObserver(
   obj: any,
   propertyName: string,
-  descriptor: DeepComputedFromPropertyDescriptor,
+  descriptor: ComputedFromPropertyDescriptor,
   observerLocator: ObserverLocator,
   parser: Parser,
 ) {
@@ -99,7 +99,6 @@ function createComputedObserver(
     computedExpression,
     observerLocator,
     descriptor,
-    computedOptions.deep,
-    computedOptions.cache
+    computedOptions
   );
 }

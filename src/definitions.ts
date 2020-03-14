@@ -7,7 +7,7 @@ import {
   ICollectionObserverSplice
 } from "aurelia-binding";
 import { TaskQueue } from "aurelia-framework";
-import { ComputedExpression } from "./deep-computed-expression";
+import { ComputedExpression } from "./computed-expression";
 
 export type IPropertyObserver = InternalPropertyObserver & {
   subscribe(context: string | ICallable, callable?: ICallable): Disposable;
@@ -36,7 +36,7 @@ export interface IProcessedComputedOptions extends IComputedOptions {
   computedExpression?: ComputedExpression;
 }
 
-export interface DeepComputedFromPropertyDescriptor extends PropertyDescriptor {
+export interface ComputedFromPropertyDescriptor extends PropertyDescriptor {
   get?: (() => any) & { computed: IComputedOptions };
 }
 

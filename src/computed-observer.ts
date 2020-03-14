@@ -5,13 +5,16 @@ import {
   Scope,
   createOverrideContext,
   Binding,
-  Disposable
+  Disposable,
+  sourceContext
 } from 'aurelia-binding';
 import {
   ICallable,
-  IDependency
+  IDependency,
+  IComputedOptions,
+  ComputedFromPropertyDescriptor
 } from './definitions';
-import { ComputedExpression } from './deep-computed-expression';
+import { ComputedExpression } from './computed-expression';
 import { getDependency, releaseDep } from './dependency';
 
 // a deep observer needsd to be able to
@@ -88,6 +91,10 @@ export class ComputedObserver {
    */
   private observing: boolean;
 
+  public deep: boolean;
+
+  public cache: boolean;
+
   constructor(
     public obj: object,
     /**
@@ -100,17 +107,18 @@ export class ComputedObserver {
     public expression: ComputedExpression,
     public observerLocator: ObserverLocator,
     private descriptor: PropertyDescriptor,
-    public deep: boolean,
-    public cache: boolean,
+    private computedOptions: IComputedOptions
   ) {
     this.scope = { bindingContext: obj, overrideContext: createOverrideContext(obj) };
-    if (cache) {
+    if (computedOptions.cache) {
       const propertyName = expression.name;
+      const getterFn = (() => 
+        // not observing === no track === no confidence that the current value is correct
+        this.observing ? this.currentValue : this.$get()
+      ) as ComputedFromPropertyDescriptor['get'];
+      getterFn.computed = computedOptions;
       Object.defineProperty(obj, propertyName, {
-        get: () => {
-          // not observing === no track === no confidence that the current value is correct
-          return this.observing ? this.currentValue : this.$get();
-        },
+        get: getterFn,
         set: descriptor.set,
         configurable: true,
         enumerable: true
@@ -162,9 +170,9 @@ export class ComputedObserver {
     if (this.removeSubscriber(context, callable) && !this.hasSubscribers()) {
       this.observing = false;
       this.unobserveDeps();
+      this.notifyingDeps.length = 0;
       this.unobserve(true);
       this.oldValue = unset;
-      this.notifyingDeps.length = 0;
     }
   }
 
@@ -173,7 +181,7 @@ export class ComputedObserver {
     let oldValue = this.oldValue;
     if (newValue !== oldValue) {
       this.oldValue = newValue;
-      this.callSubscribers(newValue, oldValue === unset ? undefined : oldValue);
+      this.callSubscribers(newValue, oldValue === unset ? void 0 : oldValue);
     }
     if (this.isQueued) {
       this.notifyingDeps.forEach(dep => {
