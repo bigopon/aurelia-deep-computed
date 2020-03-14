@@ -124,7 +124,7 @@ class BaseCollectionDependency {
     release() {
         const observer = this.observer;
         if (observer != null) {
-            observer.unsubscribe(arrayDepContext, this);
+            observer.unsubscribe(this.subscribeContext, this);
             this.observer = void 0;
         }
         this.deps.forEach(releaseDep);
@@ -281,7 +281,7 @@ const emptyLookupFunctions = {
     bindingBehaviors: name => null,
 };
 const unset = {};
-class DeepComputedObserver {
+class ComputedObserver {
     constructor(obj, 
     /**
      * The expression that will be used to evaluate
@@ -290,11 +290,10 @@ class DeepComputedObserver {
     //  - a thin layer wrapping around getting/setting value of the targeted computed property
     //  - an abstraction for dealing with a list of declared dependencies and their corresponding value
     //    that uses existing Aurelia binding capabilities
-    expression, observerLocator, deep) {
+    expression, observerLocator, descriptor, computedOptions) {
         this.obj = obj;
         this.expression = expression;
         this.observerLocator = observerLocator;
-        this.deep = deep;
         /**
          * @internal
          */
@@ -308,19 +307,46 @@ class DeepComputedObserver {
          */
         this.notifyingDeps = [];
         this.scope = { bindingContext: obj, overrideContext: createOverrideContext(obj) };
+        this.deep = computedOptions.deep;
+        this.cache = computedOptions.cache;
+        if (computedOptions.cache) {
+            const propertyName = expression.name;
+            const getterFn = (() => 
+            // not observing === no track === no confidence that the current value is correct
+            this.observing ? this.currentValue : this.$get());
+            getterFn.computed = computedOptions;
+            Object.defineProperty(obj, propertyName, {
+                get: getterFn,
+                set: descriptor.set,
+                configurable: true,
+                enumerable: true
+            });
+            this.$get = () => {
+                return descriptor.get.call(obj);
+            };
+        }
+        else {
+            this.$get = () => {
+                return expression.evaluate(this.scope, emptyLookupFunctions);
+            };
+        }
     }
     getValue() {
-        return this.expression.evaluate(this.scope, emptyLookupFunctions);
+        return this.cache && this.observing
+            ? this.currentValue
+            : this.$get();
     }
     setValue(newValue) {
+        // supports getter
         this.expression.assign(this.scope, newValue, emptyLookupFunctions);
     }
     subscribe(context, callable) {
         if (!this.hasSubscribers()) {
-            this.oldValue = this.expression.evaluate(this.scope, emptyLookupFunctions);
+            this.oldValue = this.$get();
             this.expression.connect(
             /* @connectable makes this class behave as Binding */ this, this.scope);
             this.observeDeps();
+            this.observing = true;
         }
         this.addSubscriber(context, callable);
         // scenario where this observer is created manually via ObserverLocator.getObserver
@@ -334,18 +360,19 @@ class DeepComputedObserver {
     }
     unsubscribe(context, callable) {
         if (this.removeSubscriber(context, callable) && !this.hasSubscribers()) {
+            this.observing = false;
             this.unobserveDeps();
+            this.notifyingDeps.length = 0;
             this.unobserve(true);
             this.oldValue = unset;
-            this.notifyingDeps.length = 0;
         }
     }
     call() {
-        let newValue = this.expression.evaluate(this.scope, emptyLookupFunctions);
+        let newValue = this.currentValue = this.$get();
         let oldValue = this.oldValue;
         if (newValue !== oldValue) {
             this.oldValue = newValue;
-            this.callSubscribers(newValue, oldValue);
+            this.callSubscribers(newValue, oldValue === unset ? void 0 : oldValue);
         }
         if (this.isQueued) {
             this.notifyingDeps.forEach(dep => {
@@ -407,8 +434,8 @@ class DeepComputedObserver {
     }
 }
 // use this instead of decorator to avoid extra generated code
-connectable()(DeepComputedObserver);
-subscriberCollection()(DeepComputedObserver);
+connectable()(ComputedObserver);
+subscriberCollection()(ComputedObserver);
 
 class ComputedExpression extends Expression {
     constructor(name, dependencies) {
@@ -457,23 +484,31 @@ function configure(config) {
         });
     });
 }
-function deepComputedFrom(...expressions) {
+function deepComputedFrom(...args) {
     return function (target, key, descriptor) {
-        descriptor.get.computed = {
-            deep: true,
-            deps: expressions,
-        };
+        descriptor.get.computed = buildOptions(args, true);
         return descriptor;
     };
 }
-function shallowComputedFrom(...expressions) {
+function shallowComputedFrom(...args) {
     return function (target, key, descriptor) {
-        descriptor.get.computed = {
-            deep: false,
-            deps: expressions
-        };
+        descriptor.get.computed = buildOptions(args, false);
         return descriptor;
     };
+}
+function buildOptions(args, deep) {
+    const isConfigObject = args.length === 1 && typeof args[0] === 'object';
+    const deps = isConfigObject
+        ? args[0].deps || []
+        : args;
+    const computedOptions = {
+        deep: deep,
+        deps: typeof deps === 'string' /* could be string when using config object, i.e deps: 'data' */
+            ? [deps]
+            : deps,
+        cache: isConfigObject ? args[0].cache : false
+    };
+    return computedOptions;
 }
 function createComputedObserver(obj, propertyName, descriptor, observerLocator, parser) {
     const getterFn = descriptor.get;
@@ -488,8 +523,8 @@ function createComputedObserver(obj, propertyName, descriptor, observerLocator, 
         }
         computedExpression = computedOptions.computedExpression = new ComputedExpression(propertyName, parsedDeps);
     }
-    return new DeepComputedObserver(obj, computedExpression, observerLocator, computedOptions.deep);
+    return new ComputedObserver(obj, computedExpression, observerLocator, descriptor, computedOptions);
 }
 
-export { DeepComputedObserver, configure, deepComputedFrom, shallowComputedFrom };
+export { ComputedObserver, configure, deepComputedFrom, shallowComputedFrom };
 //# sourceMappingURL=index.js.map

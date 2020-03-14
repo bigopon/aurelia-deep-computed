@@ -1,5 +1,5 @@
 import { InternalCollectionObserver, Disposable, InternalPropertyObserver, Expression, ObserverLocator, ICollectionObserverSplice } from "aurelia-binding";
-import { ComputedExpression } from "./deep-computed-expression";
+import { ComputedExpression } from "./computed-expression";
 export declare type IPropertyObserver = InternalPropertyObserver & {
     subscribe(context: string | ICallable, callable?: ICallable): Disposable;
     unsubscribe(context: string | ICallable, callable?: ICallable): void;
@@ -11,6 +11,9 @@ export declare type ICollectionObserver = InternalCollectionObserver & {
 export interface IComputedOptions {
     deep: boolean;
     deps: string[];
+    cache: boolean;
+}
+export interface IProcessedComputedOptions extends IComputedOptions {
     /**
      * Used to cache parsed expression from declared dependency
      */
@@ -20,7 +23,7 @@ export interface IComputedOptions {
      */
     computedExpression?: ComputedExpression;
 }
-export interface DeepComputedFromPropertyDescriptor extends PropertyDescriptor {
+export interface ComputedFromPropertyDescriptor extends PropertyDescriptor {
     get?: (() => any) & {
         computed: IComputedOptions;
     };

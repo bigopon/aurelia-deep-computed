@@ -17,7 +17,7 @@
     "test:watch": "karma start",
     "test:debugger": "karma start --browsers ChromeDebugging",
     "lint": "tslint -c tslint.json '{src,test}/**/*.ts' --force",
-    "precut-release": "npm run test && npm run build",
+    "precut-release": "npm run test",
     "cut-release": "git add dist && standard-version -t \"\" -i doc/CHANGELOG.md"
   },
   "keywords": [

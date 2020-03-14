@@ -56,6 +56,7 @@ export class ComputedObserver {
    * @internal
    */
   private isQueued: boolean = false;
+
   /**
    * @internal
    */
@@ -78,6 +79,7 @@ export class ComputedObserver {
 
   /**
    * Only used when the observer is config to cache read
+   * @internal
    */
   private currentValue: any;
 
@@ -146,7 +148,6 @@ export class ComputedObserver {
     this.expression.assign(this.scope, newValue, emptyLookupFunctions);
   }
 
-  subscribe(context: (...args: any[]) => any): Disposable;
   subscribe(context: string | ICallable, callable?: ICallable): void | Disposable {
     if (!this.hasSubscribers()) {
       this.oldValue = this.$get();
