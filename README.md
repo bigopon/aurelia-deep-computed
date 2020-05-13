@@ -73,11 +73,9 @@ app.data.name = { first: 'b', last: 'c' }
 ```
 Rendered text will be:
 ```ts
-{"name":{"first":"b","last":"g"},"address":{"number":80,"unit":9}}
+{"name":{"first":"b","last":"c"},"address":{"number":80,"unit":9}}
 
-// no change on this, because it doesn't observe deeper than the first level
-// which are properties "name" and "address"
-{"name":{"first":"b","last":"g"},"address":{"number":80,"unit":9}}
+{"name":{"first":"b","last":"c"},"address":{"number":80,"unit":9}}
 ```
 
 #### With `cache`:
